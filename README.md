@@ -14,8 +14,8 @@ same run every time it is run, which is all it really needs to do.
 4. Extract the package file to the project directory. On Linux or macOS, run `tar -xvf package.nw`.
    Other archive utilities such as [7-zip](https://www.7-zip.org/) may work, but are untested.
 5. Apply patches to the runtime script: `git apply c2runtime.patch`
-6. Open the `index-tas.html` file in a local web server. 
-   [VSCode](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer) supports this as a plugin, while
+6. Open the `index-tas.html` file in a local web server. If you have node.js installed, run `npx serve` in the project directory.
+   [VSCode](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer) also supports this as a plugin, while
    [WebStorm](https://www.jetbrains.com/help/webstorm/editing-html-files.html#ws_html_preview_output_procedure) and other
    JetBrains editors support this by default. Opening the file directly in your browser will not work.
 
