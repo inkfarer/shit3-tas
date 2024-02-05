@@ -1,0 +1,299 @@
+diff --git a/c2runtime.js b/c2runtime.js
+index ab22ddb..334af0d 100644
+--- a/c2runtime.js
++++ b/c2runtime.js
+@@ -4971,15 +4971,16 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
+ 		var logic_start = nowtime;
+ 		if (!debug_step && this.isSuspended && !background_wake)
+ 			return;
+-		if (!background_wake)
+-		{
+-			if (raf)
+-				this.raf_id = raf(this.tickFunc);
+-			else
+-			{
+-				this.timeout_id = setTimeout(this.tickFunc, this.isMobile ? 1 : 16);
+-			}
+-		}
++		// inky edit: disabled to allow us to do timing instead
++		// if (!background_wake)
++		// {
++		// 	if (raf)
++		// 		this.raf_id = raf(this.tickFunc);
++		// 	else
++		// 	{
++		// 		this.timeout_id = setTimeout(this.tickFunc, this.isMobile ? 1 : 16);
++		// 	}
++		// }
+ 		var raf_time = timestamp || nowtime;
+ 		var fsmode = this.fullscreen_mode;
+ 		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || !!document["msFullscreenElement"]) && !this.isCordova;
+@@ -7208,6 +7209,92 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
+ 		o["system"] = this.system.saveToJSON();
+ 		return JSON.stringify(o);
+ 	};
++	// inky edit: copy of above function without json
++	Runtime.prototype.saveToObject = function()
++	{
++		var i, len, j, lenj, type, layout, typeobj, g, c, a, v, p;
++		var o = {
++			"c2save":				true,
++			"version":				1,
++			"rt": {
++				"time":				this.kahanTime.sum,
++				"walltime":			this.wallTime.sum,
++				"timescale":		this.timescale,
++				"tickcount":		this.tickcount,
++				"execcount":		this.execcount,
++				"next_uid":			this.next_uid,
++				"running_layout":	this.running_layout.sid,
++				"start_time_offset": (Date.now() - this.start_time)
++			},
++			"types": {},
++			"layouts": {},
++			"events": {
++				"groups": {},
++				"cnds": {},
++				"acts": {},
++				"vars": {}
++			}
++		};
++		for (i = 0, len = this.types_by_index.length; i < len; i++)
++		{
++			type = this.types_by_index[i];
++			if (type.is_family || this.typeHasNoSaveBehavior(type))
++				continue;
++			typeobj = {
++				"instances": []
++			};
++			if (cr.hasAnyOwnProperty(type.extra))
++				typeobj["ex"] = CopyExtraObject(type.extra);
++			for (j = 0, lenj = type.instances.length; j < lenj; j++)
++			{
++				typeobj["instances"].push(this.saveInstanceToJSON(type.instances[j]));
++			}
++			o["types"][type.sid.toString()] = typeobj;
++		}
++		for (i = 0, len = this.layouts_by_index.length; i < len; i++)
++		{
++			layout = this.layouts_by_index[i];
++			o["layouts"][layout.sid.toString()] = layout.saveToJSON();
++		}
++		var ogroups = o["events"]["groups"];
++		for (i = 0, len = this.allGroups.length; i < len; i++)
++		{
++			g = this.allGroups[i];
++			ogroups[g.sid.toString()] = this.groups_by_name[g.group_name].group_active;
++		}
++		var ocnds = o["events"]["cnds"];
++		for (p in this.cndsBySid)
++		{
++			if (this.cndsBySid.hasOwnProperty(p))
++			{
++				c = this.cndsBySid[p];
++				if (cr.hasAnyOwnProperty(c.extra))
++					ocnds[p] = { "ex": CopyExtraObject(c.extra) };
++			}
++		}
++		var oacts = o["events"]["acts"];
++		for (p in this.actsBySid)
++		{
++			if (this.actsBySid.hasOwnProperty(p))
++			{
++				a = this.actsBySid[p];
++				if (cr.hasAnyOwnProperty(a.extra))
++					oacts[p] = { "ex": CopyExtraObject(a.extra) };
++			}
++		}
++		var ovars = o["events"]["vars"];
++		for (p in this.varsBySid)
++		{
++			if (this.varsBySid.hasOwnProperty(p))
++			{
++				v = this.varsBySid[p];
++				if (!v.is_constant && (!v.parent || v.is_static))
++					ovars[p] = v.data;
++			}
++		}
++		o["system"] = this.system.saveToJSON();
++		return o;
++	};
+ 	Runtime.prototype.refreshUidMap = function ()
+ 	{
+ 		var i, len, type, j, lenj, inst;
+@@ -7379,6 +7466,175 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
+ 						t = type.container[k];
+ 						if (type === t)
+ 							continue;
++;
++						inst.siblings.push(t.instances[iid]);
++					}
++				}
++				if (inst.afterLoad)
++					inst.afterLoad();
++				if (inst.behavior_insts)
++				{
++					for (k = 0, lenk = inst.behavior_insts.length; k < lenk; k++)
++					{
++						binst = inst.behavior_insts[k];
++						if (binst.afterLoad)
++							binst.afterLoad();
++					}
++				}
++			}
++		}
++		this.redraw = true;
++		return true;
++	};
++	// inky edit: previous function without json parsing
++	Runtime.prototype.loadFromObject = function (o)
++	{
++		if (!o["c2save"])
++			return false;		// probably not a c2 save state
++		if (o["version"] > 1)
++			return false;		// from future version of c2; assume not compatible
++		this.isLoadingState = true;
++		var rt = o["rt"];
++		this.kahanTime.reset();
++		this.kahanTime.sum = rt["time"];
++		this.wallTime.reset();
++		this.wallTime.sum = rt["walltime"] || 0;
++		this.timescale = rt["timescale"];
++		this.tickcount = rt["tickcount"];
++		this.execcount = rt["execcount"];
++		this.start_time = Date.now() - rt["start_time_offset"];
++		var layout_sid = rt["running_layout"];
++		if (layout_sid !== this.running_layout.sid)
++		{
++			var changeToLayout = this.getLayoutBySid(layout_sid);
++			if (changeToLayout)
++				this.doChangeLayout(changeToLayout);
++			else
++				return;		// layout that was saved on has gone missing (deleted?)
++		}
++		var i, len, j, lenj, k, lenk, p, type, existing_insts, load_insts, inst, binst, layout, layer, g, iid, t;
++		var otypes = o["types"];
++		for (p in otypes)
++		{
++			if (otypes.hasOwnProperty(p))
++			{
++				type = this.getObjectTypeBySid(parseInt(p, 10));
++				if (!type || type.is_family || this.typeHasNoSaveBehavior(type))
++					continue;
++				if (otypes[p]["ex"])
++					type.extra = otypes[p]["ex"];
++				else
++					cr.wipe(type.extra);
++				existing_insts = type.instances;
++				load_insts = otypes[p]["instances"];
++				for (i = 0, len = cr.min(existing_insts.length, load_insts.length); i < len; i++)
++				{
++					this.loadInstanceFromJSON(existing_insts[i], load_insts[i]);
++				}
++				for (i = load_insts.length, len = existing_insts.length; i < len; i++)
++					this.DestroyInstance(existing_insts[i]);
++				for (i = existing_insts.length, len = load_insts.length; i < len; i++)
++				{
++					layer = null;
++					if (type.plugin.is_world)
++					{
++						layer = this.running_layout.getLayerBySid(load_insts[i]["w"]["l"]);
++						if (!layer)
++							continue;
++					}
++					inst = this.createInstanceFromInit(type.default_instance, layer, false, 0, 0, true);
++					this.loadInstanceFromJSON(inst, load_insts[i]);
++				}
++				type.stale_iids = true;
++			}
++		}
++		this.ClearDeathRow();
++		this.refreshUidMap();
++		var olayouts = o["layouts"];
++		for (p in olayouts)
++		{
++			if (olayouts.hasOwnProperty(p))
++			{
++				layout = this.getLayoutBySid(parseInt(p, 10));
++				if (!layout)
++					continue;		// must've gone missing
++				layout.loadFromJSON(olayouts[p]);
++			}
++		}
++		var ogroups = o["events"]["groups"];
++		for (p in ogroups)
++		{
++			if (ogroups.hasOwnProperty(p))
++			{
++				g = this.getGroupBySid(parseInt(p, 10));
++				if (g && this.groups_by_name[g.group_name])
++					this.groups_by_name[g.group_name].setGroupActive(ogroups[p]);
++			}
++		}
++		var ocnds = o["events"]["cnds"];
++		for (p in this.cndsBySid)
++		{
++			if (this.cndsBySid.hasOwnProperty(p))
++			{
++				if (ocnds.hasOwnProperty(p))
++				{
++					this.cndsBySid[p].extra = ocnds[p]["ex"];
++				}
++				else
++				{
++					this.cndsBySid[p].extra = {};
++				}
++			}
++		}
++		var oacts = o["events"]["acts"];
++		for (p in this.actsBySid)
++		{
++			if (this.actsBySid.hasOwnProperty(p))
++			{
++				if (oacts.hasOwnProperty(p))
++				{
++					this.actsBySid[p].extra = oacts[p]["ex"];
++				}
++				else
++				{
++					this.actsBySid[p].extra = {};
++				}
++			}
++		}
++		var ovars = o["events"]["vars"];
++		for (p in ovars)
++		{
++			if (ovars.hasOwnProperty(p) && this.varsBySid.hasOwnProperty(p))
++			{
++				this.varsBySid[p].data = ovars[p];
++			}
++		}
++		this.next_uid = rt["next_uid"];
++		this.isLoadingState = false;
++		for (i = 0, len = this.fireOnCreateAfterLoad.length; i < len; ++i)
++		{
++			inst = this.fireOnCreateAfterLoad[i];
++			this.trigger(Object.getPrototypeOf(inst.type.plugin).cnds.OnCreated, inst);
++		}
++		cr.clearArray(this.fireOnCreateAfterLoad);
++		this.system.loadFromJSON(o["system"]);
++		for (i = 0, len = this.types_by_index.length; i < len; i++)
++		{
++			type = this.types_by_index[i];
++			if (type.is_family || this.typeHasNoSaveBehavior(type))
++				continue;
++			for (j = 0, lenj = type.instances.length; j < lenj; j++)
++			{
++				inst = type.instances[j];
++				if (type.is_contained)
++				{
++					iid = inst.get_iid();
++					cr.clearArray(inst.siblings);
++					for (k = 0, lenk = type.container.length; k < lenk; k++)
++					{
++						t = type.container[k];
++						if (type === t)
++							continue;
+ ;
+ 						inst.siblings.push(t.instances[iid]);
+ 					}
