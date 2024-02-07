@@ -51,3 +51,5 @@ same run every time it is run, which is all it really needs to do.
   the size of the replay file.
 - The "save" and "load" buttons are remnants from an early proof of concept. They do what they say, but aren't needed
   for a TAS run.
+- Frame 0 of each level's replay should contain an event for both buttons (either up or down) so it can be set properly
+  after the level changes.
