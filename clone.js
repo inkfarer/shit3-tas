@@ -1,3 +1,6 @@
+// 'just-clone' - by angus croll, licensed under the MIT license
+// https://github.com/angus-c/just/tree/d8c5dd18941062d8db7e9310ecc8f53fd607df54/packages/collection-clone
+
 function clone(obj) {
     let result = obj;
     var type = {}.toString.call(obj).slice(8, -1);
